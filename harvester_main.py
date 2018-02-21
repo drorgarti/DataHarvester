@@ -17,6 +17,10 @@ import os.path
 
 class DataHarvester(object):
 
+    ANGELLIST_DATA_FILES_PATH = r'C:\temp\AcureRate\DATA\AngelList Data'
+    ANGELLIST_DETAILED_DATA_FILES_PATH = r'C:\temp\AcureRate\DATA\AngelList Detailed Data'
+    ANGELLIST_PHOTO_FILES_PATH = r'C:\temp\AcureRate\DATA\AngelList Photos'
+
     def __init__(self):
 
         self.angellist_properties = ['name', 'angellist url', 'display name', 'description', 'location', 'market tags',
@@ -176,7 +180,7 @@ class DataHarvester(object):
         rc = 0
         for c in letters_range:
             # Open file
-            companies_file = open(r'F:\temp\Data Files\%s_angellist_companies.csv' % c.upper(), 'a', encoding="utf-8")
+            companies_file = open(r'%s\%s_angellist_companies.csv' % (DataHarvester.ANGELLIST_DATA_FILES_PATH, c.upper()), 'a', encoding="utf-8")
             for i in main_page_range:
                 if custom_main_page_start and i < custom_main_page_start:
                     continue
@@ -361,7 +365,7 @@ class DataHarvester(object):
             elems = soup.select("div.summary div.photo img")
             if elems and len(elems) == 1 and 'nopic_' not in elems[0]['src']:
                 data_obj['photo url'] = elems[0]['src']
-                relative_path = self.download_photo(r'F:\temp\Data Files', letter, company_name, elems[0]['src'])
+                relative_path = self.download_photo(DataHarvester.ANGELLIST_PHOTO_FILES_PATH, letter, company_name, elems[0]['src'])
                 if relative_path:
                     data_obj['photo uuid'] = relative_path
         except:
@@ -504,17 +508,17 @@ class DataHarvester(object):
         if rc == 200:
             data_row = self.parse_result(letter, txt, company_name, url)
         elif rc == 404:
-            print('*** Request on %s returned with %s (%s)' % (company_name, rc, txt))
+            print('*** Request on %s returned with %s.' % (company_name, rc))
         else:
             print('*** Request on %s returned with %s (%s)' % (company_name, rc, txt))
 
-        return data_row
+        return rc, data_row
 
     def read_and_scrape(self, letter):
 
         encoding = 'utf-8'
-        path = r'F:\temp\Data Files\%s_angellist_companies.csv' % letter.upper()
-        out_path = r'F:\temp\Data Files\%s_angellist_companies_detailed.csv' % letter.upper()
+        path = r'%s\%s_angellist_companies.csv' % (DataHarvester.ANGELLIST_DATA_FILES_PATH, letter.upper())
+        out_path = r'%s\%s_angellist_companies_detailed.csv' % (DataHarvester.ANGELLIST_DETAILED_DATA_FILES_PATH, letter.upper())
 
         # Read last line in file
         if os.path.exists(out_path):
@@ -558,7 +562,7 @@ class DataHarvester(object):
             url = csv_row[2]
 
             # Scrape each URL
-            data_row = self.scrape_company(letter, company_name, url)
+            rc, data_row = self.scrape_company(letter, company_name, url)
 
             # Write results to file
             if data_row:
@@ -573,9 +577,10 @@ class DataHarvester(object):
                     print('%s: Unable to write data_row for %s to file (%s)' % (now_str, company_name, e))
                 self.num_consecutive_failures = 0
             else:
-                print('Failed to write %s to file. Moving on...' % company_name)
+                print('Failed to write %s to file (rc=%s). Moving on...' % (company_name, rc))
                 self.num_consecutive_failures += 1
-                sleep(60)
+                if rc != 404:
+                    sleep(60)
                 if self.num_consecutive_failures > 20:
                     output_file.close()
                     raise Exception("Too many consecutive failures. Aborting.")
@@ -588,11 +593,12 @@ if __name__ == '__main__':
     # AngelList Scraping...
     # DataHarvester.get_info_from_al()
 
+    # Done: A, B, C, D, E, (F), G, H, (I), J, K, L, M, N, O, P, (Q), (R), S, T, (U), (V), (W), X, (Y), (Z)
     print("Are you sure you changed the letter below? Type SURE to continue.")
     answer = input(">>>")
     if answer == 'SURE':
         dh = DataHarvester()
-        dh.read_and_scrape('U')
+        dh.read_and_scrape('H')
         print('Done harvesting data!')
 
     pass
