@@ -23,7 +23,7 @@ class DataHarvester(object):
     PEOPLE_DETAILS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\People'
     PEOPLE_PHOTOS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\People\Photos'
 
-    DOWNLOAD_PHOTOS = False
+    DOWNLOAD_PHOTOS = True
     UPDATE_COUNT = 100  # if -1, the scraping will never stop... :-)
 
     def __init__(self):
