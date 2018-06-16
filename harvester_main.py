@@ -17,11 +17,13 @@ import os.path
 
 class DataHarvester(object):
 
-    COMPANY_ANCHOR_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\Anchors'
-    COMPANY_DETAILS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\Companies'
-    COMPANIES_LOGOS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\Companies\Logos'
-    PEOPLE_DETAILS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\People'
-    PEOPLE_PHOTOS_FOLDER = r'F:\AcureRate\DATA\AngelList Data\AngelList Scraping\People\Photos'
+    DRIVE_LETTER = 'C'
+    ANGELLIST_DIR = 'temp\AcureRate\DATA\AngelList Data\AngelList Scraping'
+    COMPANY_ANCHOR_FOLDER = r'%s:\%s\Companies Anchors' % (DRIVE_LETTER, ANGELLIST_DIR)
+    COMPANY_DETAILS_FOLDER = r'%s:\%s\Companies' % (DRIVE_LETTER, ANGELLIST_DIR)
+    COMPANIES_LOGOS_FOLDER = r'%s:\%s\Companies\Logos' % (DRIVE_LETTER, ANGELLIST_DIR)
+    PEOPLE_DETAILS_FOLDER = r'%s:\%s\People' % (DRIVE_LETTER, ANGELLIST_DIR)
+    PEOPLE_PHOTOS_FOLDER = r'%s:\%s\People\Photos' % (DRIVE_LETTER, ANGELLIST_DIR)
 
     DOWNLOAD_PHOTOS = True
     UPDATE_COUNT = 100  # if -1, the scraping will never stop... :-)
@@ -72,6 +74,10 @@ class DataHarvester(object):
 
     def perform_request(self, url):
 
+        # Check url validity
+        if not url.startswith('http://') and not url.startswith('https://'):
+            return 901, 'not a valid URL'
+
         retries = 0
         while retries < 3:
             try:
@@ -82,11 +88,11 @@ class DataHarvester(object):
             except requests.exceptions.ConnectionError as e:
                 txt = "Connection refused - %s" % url
                 print('Exception %s raised. retries: %s' % (e, retries))
-                sleep(300)  # Sleep 1 minute
+                #sleep(300)  # Sleep 1 minute
             except Exception as e:
                 txt = '<%s>' % e
                 print('Exception %s raised. retries: %s' % (e, retries))
-                sleep(300)  # Sleep 1 minute
+                #sleep(300)  # Sleep 1 minute
             retries += 1
 
         if retries == 3:
@@ -745,9 +751,9 @@ class DataHarvester(object):
                 data_row.append(val)
             return rc, data_row
         elif rc == 404:
-            print('*** Request on %s returned with %s' % (person_name, rc))
+            print('*** Request on %s returned with %s. Ignoring.' % (person_name, rc))
         else:
-            print('*** Request on %s returned with %s' % (person_name, rc))
+            print('*** Request on %s returned with %s. Ignoring.' % (person_name, rc))
 
         return rc, data_obj
 
@@ -860,7 +866,7 @@ class DataHarvester(object):
         should_write_header = True if not os.path.isfile(path) else False
 
         # Create CSV writer for the results
-        output_file = open(out_path, 'a', newline='', encoding='utf-8')
+        output_file = open(out_path, 'a+', newline='', encoding='utf-8')
         csv_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         if should_write_header:
             csv_writer.writerow(self.angellist_person_properties)
@@ -918,7 +924,7 @@ class DataHarvester(object):
                 else:
                     print('Failed to write %s (%s) to file. (rc=%s). Moving on...' % (person_name, company_name, rc))
                     self.num_consecutive_failures += 1
-                    sleep(60)
+                    #sleep(60)
                     if self.num_consecutive_failures > 20:
                         output_file.close()
                         raise Exception("Too many consecutive failures. Aborting.")
@@ -931,7 +937,7 @@ if __name__ == '__main__':
     dh = DataHarvester()
     #DataHarvester.rip_company_anchors_from_index_pages()
     #dh.read_and_scrape_companies_from_anchors('U')
-    dh.read_and_scrape_people_from_companies_file('D')
+    dh.read_and_scrape_people_from_companies_file('Y')
 
     print('Done harvesting data!')
 
