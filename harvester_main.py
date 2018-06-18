@@ -900,6 +900,10 @@ class DataHarvester(object):
                 persons.extend(csv_row[16].split(';'))
             persons_set = set(persons)
             for person_data in list(persons_set):
+                if len(person_data.split('|')) < 2:
+                    print('unable to parse person data - missing name or url (is there semi-colon in name?')
+                    continue;
+
                 person_name = person_data.split('|')[0].strip()
                 person_url = person_data.split('|')[1].strip()
                 rc, data_row = self.scrape_peron_profile_page(letter, company_name, company_url, person_name, person_url, reliability_score)
@@ -937,7 +941,7 @@ if __name__ == '__main__':
     dh = DataHarvester()
     #DataHarvester.rip_company_anchors_from_index_pages()
     #dh.read_and_scrape_companies_from_anchors('U')
-    dh.read_and_scrape_people_from_companies_file('Y')
+    dh.read_and_scrape_people_from_companies_file('W')
 
     print('Done harvesting data!')
 
