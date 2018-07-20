@@ -938,11 +938,13 @@ class DataHarvester(object):
 
 if __name__ == '__main__':
 
-    dh = DataHarvester()
-    #DataHarvester.rip_company_anchors_from_index_pages()
-    #dh.read_and_scrape_companies_from_anchors('U')
-    dh.read_and_scrape_people_from_companies_file('W')
-
-    print('Done harvesting data!')
+    letter = input("Enter the letter you wish to scrape:\n")
+    if len(letter) == 1:
+        dh = DataHarvester()
+        dh.read_and_scrape_people_from_companies_file(letter.upper())
+        # Need to do 'S' which we skipped...
+        print("Done harvesting data for the letter '%s'!" % letter)
+    else:
+        print('*** expecting a single letter. aborting.')
 
     pass
