@@ -1,3 +1,4 @@
+import sys
 import time
 import random
 import http
@@ -17,18 +18,25 @@ import os.path
 
 class DataHarvester(object):
 
-    DRIVE_LETTER = 'C'
-    ANGELLIST_DIR = 'temp\AcureRate\DATA\AngelList Data\AngelList Scraping'
+    DRIVE_LETTER = 'F'
+    ANGELLIST_DIR = 'AcureRate\DATA\AngelList Data\AngelList Scraping'
     COMPANY_ANCHOR_FOLDER = r'%s:\%s\Companies Anchors' % (DRIVE_LETTER, ANGELLIST_DIR)
     COMPANY_DETAILS_FOLDER = r'%s:\%s\Companies' % (DRIVE_LETTER, ANGELLIST_DIR)
     COMPANIES_LOGOS_FOLDER = r'%s:\%s\Companies\Logos' % (DRIVE_LETTER, ANGELLIST_DIR)
     PEOPLE_DETAILS_FOLDER = r'%s:\%s\People' % (DRIVE_LETTER, ANGELLIST_DIR)
     PEOPLE_PHOTOS_FOLDER = r'%s:\%s\People\Photos' % (DRIVE_LETTER, ANGELLIST_DIR)
 
+    SEEDDB_FOLDER = r'F:\AcureRate\DATA\SeedDB'
+
     DOWNLOAD_PHOTOS = True
     UPDATE_COUNT = 100  # if -1, the scraping will never stop... :-)
 
     def __init__(self):
+
+        self.seeddb_incubators_properties = ['incubator_name', 'seeddb_url', 'website_url', 'operating', 'became_seed_fund', 'location',
+             'number_of_companies', 'total_exists_worth', 'total_funding']
+
+        self.seeddb_incubator_company_details_properties = ['incubator_name', 'name', 'seeddb_page_url', 'crunchbase_url', 'angellist_url', 'website_url', 'closed', 'exited', 'cohort_date', 'exit_value', 'funding']
 
         self.angellist_company_properties = ['name', 'angellist url', 'display name', 'description', 'location', 'market tags',
                                 'company size', 'photo url', 'photo uuid', 'company url', 'twitter url', 'facebook url', 'linkedin url',
@@ -88,11 +96,11 @@ class DataHarvester(object):
             except requests.exceptions.ConnectionError as e:
                 txt = "Connection refused - %s" % url
                 print('Exception %s raised. retries: %s' % (e, retries))
-                #sleep(300)  # Sleep 1 minute
+                sleep(30)  # Sleep...
             except Exception as e:
                 txt = '<%s>' % e
                 print('Exception %s raised. retries: %s' % (e, retries))
-                #sleep(300)  # Sleep 1 minute
+                sleep(30)  # Sleep...
             retries += 1
 
         if retries == 3:
@@ -928,23 +936,279 @@ class DataHarvester(object):
                 else:
                     print('Failed to write %s (%s) to file. (rc=%s). Moving on...' % (person_name, company_name, rc))
                     self.num_consecutive_failures += 1
-                    #sleep(60)
-                    if self.num_consecutive_failures > 20:
-                        output_file.close()
-                        raise Exception("Too many consecutive failures. Aborting.")
+                    sleep(10)
+                    if self.num_consecutive_failures > 10:
+                        print('*'*40)
+                        print('  Too many consecutive failures. Aborting.')
+                        print('*'*40)
+                        #raise Exception("Too many consecutive failures. Aborting.")
+                        break
 
         output_file.close()
         pass
 
+    def normalize_amount(self, amount):
+        new_amount = amount.replace('$', '')
+        new_amount = new_amount.replace(',', '').strip()
+        return new_amount
+
+    def parse_seeddb_incubator_request_result(self, txt):
+        incubators_data = []
+
+        soup = BeautifulSoup(txt, 'html.parser')
+
+        # Get all incubator rows
+        incubator_rows = soup.select("table.tablesorter tr")
+
+        # Iterate over all rows and get detailed information
+        try:
+            for tr_elem in incubator_rows[1:]:
+                data_obj = {}
+
+                # "td:nth-of-type(1) a:nth-of-type(2)"
+                name_elems = tr_elem.select("td:nth-of-type(1) a")
+                try:
+                    data_obj['seeddb_url'] = name_elems[0]['href']
+                    data_obj['incubator_name'] = name_elems[0].text.strip()
+                except:
+                    print('cannot locate seedb_url')
+
+                try:
+                    data_obj['website_url'] = name_elems[1]['href']
+                except:
+                    print('cannot locate website_url')
+
+                try:
+                    data_obj['operating'] = True
+                    data_obj['became_seed_fund'] = False
+                    btn_elem = tr_elem.select("td button.btn")
+                    if len(btn_elem) > 0:
+                        if btn_elem[0].text == 'Not Operating':
+                            data_obj['operating'] = False
+                        elif btn_elem[0].text == 'Became Seed Fund':
+                            data_obj['became_seed_fund'] = True
+                except:
+                    print('cannot locate website_url')
+
+                try:
+                    data_obj['location'] = tr_elem.select("td:nth-of-type(2)")[0].text.strip()
+                except:
+                    print('cannot locate location data')
+
+                try:
+                    data_obj['number_of_companies'] = tr_elem.select("td:nth-of-type(3)")[0].text.strip()
+                except:
+                    print('cannot locate location data')
+
+                try:
+                    amount = tr_elem.select("td:nth-of-type(4)")[0].text
+                    data_obj['total_exists_worth'] = self.normalize_amount(amount)
+                except:
+                    print('cannot locate location data')
+
+                try:
+                    amount = tr_elem.select("td:nth-of-type(5)")[0].text
+                    data_obj['total_funding'] = self.normalize_amount(amount)
+                except:
+                    print('cannot locate location data')
+
+                # Translate Data_Obj to an array of strings:
+                data_row = []
+                for property in self.seeddb_incubators_properties:
+                    val = data_obj[property] if property in data_obj else ''
+                    data_row.append(val)
+                # push data_obj into list of incubators
+                incubators_data.append(data_row)
+        except:
+            print('Unable to get information in response')
+
+        return incubators_data
+
+    def parse_seeddb_incubator_details_request_result(self, txt, incubator_name, row_count):
+        incubator_companies_data = []
+
+        soup = BeautifulSoup(txt, 'html.parser')
+
+        # Get all incubator rows
+        incubator_rows = soup.select("table.tablesorter tr")
+
+        print('%s: parsing %s companies' % (incubator_name, len(incubator_rows)))
+
+        # Iterate over all rows and get detailed information
+        for tr_elem in incubator_rows[1:]:
+            data_obj = {}
+
+            data_obj['incubator_name'] = incubator_name
+
+            try:
+                td_1_elem = tr_elem.select("td:nth-of-type(1)")[0]
+                closed_btn_elem = td_1_elem.select("button.btn-danger")
+                if len(closed_btn_elem) > 0:
+                    data_obj['closed'] = True
+                exited_btn_elem = td_1_elem.select("button.btn-success")
+                if len(exited_btn_elem) > 0:
+                    data_obj['exited'] = True
+            except:
+                print('cannot locate exited/closed buttons data')
+
+            try:
+                td_2_elem = tr_elem.select("td:nth-of-type(2) a")[0]
+                data_obj['name'] = td_2_elem.text.strip()
+                if '/companies/view' in td_2_elem['href']:
+                    data_obj['seeddb_page_url'] = td_2_elem['href']
+            except:
+                print('cannot locate name data')
+
+            try:
+                td_3_elem = tr_elem.select("td:nth-of-type(3) a")
+                for elem in td_3_elem:
+                    href = elem['href']
+                    if ('crunchbase.com' in href):
+                        data_obj['crunchbase_url'] = elem['href']
+                    elif ('angel.co' in href):
+                        data_obj['angellist_url'] = elem['href']
+                    else:
+                        data_obj['website_url'] = elem['href']
+            except:
+                print('cannot locate website/cb/al data')
+
+            try:
+                td_4_elem = tr_elem.select("td:nth-of-type(4)")[0]
+                data_obj['cohort_date'] = td_4_elem.text.strip()
+            except:
+                print('cannot locate cohort_date data')
+
+            try:
+                td_5_elem = tr_elem.select("td:nth-of-type(5)")[0]
+                data_obj['exit_value'] = self.normalize_amount(td_5_elem.text.strip())
+            except:
+                print('cannot locate exit_value data')
+
+            try:
+                td_6_elem = tr_elem.select("td:nth-of-type(7)")[0]
+                data_obj['funding'] = self.normalize_amount(td_6_elem.text.strip())
+            except:
+                print('cannot locate funding data')
+
+
+            # Translate Data_Obj to an array of strings:
+            data_row = []
+            for property in self.seeddb_incubator_company_details_properties:
+                val = data_obj[property] if property in data_obj else ''
+                data_row.append(val)
+            data_row.append(row_count)  # append the row count so we can continue from last row read if process stops
+
+            # push data_obj into list of incubators
+            incubator_companies_data.append(data_row)
+
+        return incubator_companies_data
+
+    def seeddb_get_incubators_list(self):
+
+        # Issue request
+        url = 'https://www.seed-db.com/accelerators'
+        rc, txt = self.perform_request(url)
+        if rc == 200:
+            incubators_list = self.parse_seeddb_incubator_request_result(txt)
+
+            # Create CSV writer for the results
+            out_path = r'%s\seeddb_incubators_list.csv' % (DataHarvester.SEEDDB_FOLDER)
+            output_file = open(out_path, 'a', newline='')
+            csv_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+            # Write to file
+            for row in incubators_list:
+                csv_writer.writerow(row)
+
+            output_file.flush()
+            output_file.close()
+        elif rc == 404:
+            print('*** Request on %s returned with %s. Ignoring.' % (url, rc))
+        else:
+            print('*** Request on %s returned with %s. Ignoring.' % (url, rc))
+        return rc
+
+    def seeddb_get_incubator_companies(self):
+
+        the_encoding = 'utf-8'
+        path = r'%s\seeddb_incubators_list.csv' % (DataHarvester.SEEDDB_FOLDER)
+        out_path = r'%s\seeddb_incubators_companies_list.csv' % (DataHarvester.SEEDDB_FOLDER)
+
+        # Read last line in file - find the company
+        last_row_read = -1
+        if os.path.exists(out_path):
+            line = self._tail(out_path, 1)
+            elems = line[0].split(',')
+            last_row_read = int(elems[-1])
+            print('>>> Detected existing file. Seeking last place we stopped... (%s) <<<' % last_row_read)
+
+        # Create CSV writer for the results
+        output_file = open(out_path, 'a+', newline='', encoding='utf-8')
+        csv_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        # Create CSV reader to get company URLs
+        in_file = codecs.open(path, "r", encoding=the_encoding, errors='ignore')
+        csv_reader = csv.reader(in_file, delimiter=',', quotechar='"')
+        row_count = 0
+        for csv_row in csv_reader:
+            row_count += 1
+            if row_count <= last_row_read:
+                continue
+
+            # Get name and url for the detailed parsing
+            incubator_name = csv_row[0]
+            seeddb_url = csv_row[1]
+            if len(csv_row) != len(self.seeddb_incubators_properties):
+                print('>>>>>>> There is a problem with a line in the CSV file: Count: %s, Company Name: %s <<<<<<<' % (row_count, incubator_name))
+                break
+
+            # Scrape the page of the specific incubator
+            seeddb_url = 'https://www.seed-db.com' + seeddb_url.replace('view', 'viewall')
+            rc, txt = self.perform_request(seeddb_url)
+
+            # Write results to file
+            if rc == 200:
+                data_rows = self.parse_seeddb_incubator_details_request_result(txt, incubator_name, row_count)
+                now_str = str(datetime.datetime.now())
+                try:
+                    for dr in data_rows:
+                        csv_writer.writerow(dr)
+                    output_file.flush()
+                    print('%s: Row %s: Done extracting data for %s and writing to file' % (now_str, row_count, incubator_name))
+                except Exception as e:
+                    print('%s: Unable to write data_row for %s to file (%s)' % (now_str, incubator_name, e))
+                self.num_consecutive_failures = 0
+            elif rc == 404:
+                print('Failed to write %s to file. (rc=404). Not found. Moving on.' % (incubator_name))
+            else:
+                print('Failed to write %s to file. (rc=%s). Moving on...' % (incubator_name))
+                self.num_consecutive_failures += 1
+                sleep(10)
+                if self.num_consecutive_failures > 10:
+                    print('*'*40)
+                    print('  Too many consecutive failures. Aborting.')
+                    print('*'*40)
+                    #raise Exception("Too many consecutive failures. Aborting.")
+                    break
+
+        output_file.close()
+
+
 if __name__ == '__main__':
 
-    letter = input("Enter the letter you wish to scrape:\n")
-    if len(letter) == 1:
-        dh = DataHarvester()
-        dh.read_and_scrape_people_from_companies_file(letter.upper())
-        # Need to do 'S' which we skipped...
-        print("Done harvesting data for the letter '%s'!" % letter)
-    else:
-        print('*** expecting a single letter. aborting.')
+    # args = sys.argv
+    #
+    # if len(args) == 2 and args[1].startswith('letter='):
+    #     letter = args[1].strip()[-1].upper()
+    #     dh = DataHarvester()
+    #     dh.read_and_scrape_people_from_companies_file(letter)
+    #     print('Done harvesting data!')
+    # else:
+    #     print('Missing the letter command-line argument')
+
+
+    dh = DataHarvester()
+    #dh.seeddb_get_incubators_list()
+    dh.seeddb_get_incubator_companies()
 
     pass
